@@ -1,6 +1,6 @@
 Package: codacore
 Title: Learning Sparse Log-Ratios for Compositional Data
-Version: 0.0.3
+Version: 0.0.4
 Authors@R: c(
     person("Elliott", "Gordon-Rodriguez", email = "eg2912@columbia.edu", role = c("aut", "cre")),
     person("Thomas", "Quinn", email = "contacttomquinn@gmail.com", role = c("aut"))
@@ -24,9 +24,9 @@ SystemRequirements: TensorFlow (https://www.tensorflow.org/)
 Suggests: zCompositions, testthat (>= 2.1.0), knitr, rmarkdown
 VignetteBuilder: knitr
 NeedsCompilation: no
-Packaged: 2022-01-05 18:12:36 UTC; elliott
+Packaged: 2022-08-27 21:09:49 UTC; elliott
 Author: Elliott Gordon-Rodriguez [aut, cre],
   Thomas Quinn [aut]
 Maintainer: Elliott Gordon-Rodriguez <eg2912@columbia.edu>
 Repository: CRAN
-Date/Publication: 2022-01-07 10:10:02 UTC
+Date/Publication: 2022-08-29 09:30:02 UTC

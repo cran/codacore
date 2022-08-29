@@ -197,12 +197,12 @@ trainRelaxation.CoDaBaseLearner = function(cdbl) {
     if (cdbl$objective == "binary classification") {
       model %>% layer_activation('sigmoid')
     }
-
+    
     # compile graph
     model %>% keras::compile(
       loss = loss_func,
-      optimizer = keras::optimizer_sgd(lr=lr, momentum=cdbl$optParams$momentum),
-      # optimizer = keras::optimizer_adam(lr=0.001),
+      optimizer = keras::optimizer_sgd(lr, momentum=cdbl$optParams$momentum),
+      # optimizer = keras::optimizer_adam(0.001),
       metrics = metrics
     )
     
@@ -447,9 +447,10 @@ predict.CoDaBaseLearner = function(cdbl, x, asLogits=TRUE) {
 #'  and vanillaLR (the learning rate to be used if the user does *not* want
 #'  to use the 'adaptiveLR', to be used at the risk of optimization issues).
 #' @param cvParams A list of named parameters for the "hardening" procedure
-#'  using cross-validation. Includes numFolds (number of folds) and
+#'  using cross-validation. Includes numFolds (number of folds, default=5) and
 #'  maxCutoffs (number of candidate cutoff values of 'c' to be tested out
-#'  during CV process).
+#'  during CV process, default=20 meaning log-ratios with up to 21 components
+#'  can be found by codacore).
 #' @param verbose A boolean. Toggles whether to display intermediate steps.
 #' @param overlap A boolean. Toggles whether successive log-ratios found by 
 #'  CoDaCoRe may contain repeated input variables. TRUE by default.
@@ -464,7 +465,7 @@ predict.CoDaBaseLearner = function(cdbl, x, asLogits=TRUE) {
 #' @return A \code{codacore} object.
 #' 
 #' @examples
-#' \donttest{
+#' \dontrun{
 #' data("Crohn")
 #' x <- Crohn[, -ncol(Crohn)]
 #' y <- Crohn[, ncol(Crohn)]
@@ -496,15 +497,15 @@ codacore <- function(
   # Convert x and y to the appropriate objects
   x = .prepx(x)
   y = .prepy(y)
-
+  
   # Check whether we are in regression or classification mode by inspecting y
   if (is.null(objective)) {
     distinct_values = length(unique(y))
     if (distinct_values == 2) {
       objective = 'binary classification'
-    } else if (class(y) == 'factor') {
+    } else if (inherits(y, 'factor')) {
       stop("Multi-class classification note yet implemented.")
-    } else if (class(y) == 'numeric') {
+    } else if (inherits(y, 'numeric')) {
       objective = 'regression'
       if (distinct_values <= 10) {
         warning("Response only has ", distinct_values, " distinct values.")
@@ -519,7 +520,7 @@ codacore <- function(
   }
   
   # Save names of labels if relevant
-  if (objective == 'binary classification' & class(y) == 'factor') {
+  if (objective == 'binary classification' & inherits(y, 'factor')) {
     yLevels = levels(y)
     y = as.numeric(y) - 1
   } else {
@@ -726,7 +727,7 @@ predict.codacore = function(object, newx, asLogits=TRUE, numLogRatios=NA, ...) {
   
   x = .prepx(newx)
   yHat = rep(0, nrow(x))
-
+  
   if (is.na(numLogRatios)) {
     numLogRatios = length(object$ensemble)
   }
@@ -796,20 +797,20 @@ print.codacore = function(x, ...) {
 #'
 #' @export
 plot.codacore = function(x, index = 1, ...) {
-
+  
   allRatios = getLogRatios(x)
   if(index > ncol(allRatios)){
     stop("The selected log-ratio does not exist!")
   }
-
+  
   if (x$objective == 'regression') {
-
+    
     logRatio = allRatios[, index]
     graphics::plot(logRatio, x$y, xlab='Log-ratio score', ylab='Response')
     graphics::abline(x$ensemble[[1]]$intercept, x$ensemble[[1]]$slope, lwd=2)
     
   } else if (x$objective == 'binary classification') {
-
+    
     logRatio = allRatios[, index]
     
     # Convert 0/1 binary output to the original labels, if any
@@ -825,7 +826,7 @@ plot.codacore = function(x, index = 1, ...) {
       ylab='Outcome',
       horizontal=TRUE
     )
-
+    
   }
 }
 
@@ -895,13 +896,22 @@ activeInputs.codacore = function(cdcr) {
 #' @param cdcr A codacore object.
 #' @param baseLearnerIndex An integer indicating which of the 
 #'     (possibly multiple) log-ratios learned by codacore to be used.
+#' @param boolean Whether to return the parts in boolean form
+#'     (a vector of TRUE/FALSE) or to return the column names of
+#'     those parts directly.
 #'
 #' @return The covariates in the numerator of the selected log-ratio.
 #' 
 #' @export
-getNumeratorParts <- function(cdcr, baseLearnerIndex = 1){
+getNumeratorParts <- function(cdcr, baseLearnerIndex=1, boolean=TRUE){
   
-  cdcr$ensemble[[baseLearnerIndex]]$hard$numerator
+  parts = cdcr$ensemble[[baseLearnerIndex]]$hard$numerator
+  
+  if (boolean) {
+    return(parts)
+  } else {
+    return(colnames(cdcr$x)[parts])
+  }
 }
 
 #' getDenominatorParts
@@ -909,13 +919,22 @@ getNumeratorParts <- function(cdcr, baseLearnerIndex = 1){
 #' @param cdcr A codacore object.
 #' @param baseLearnerIndex An integer indicating which of the 
 #'     (possibly multiple) log-ratios learned by codacore to be used.
-#'
+#' @param boolean Whether to return the parts in boolean form
+#'     (a vector of TRUE/FALSE) or to return the column names of
+#'     those parts directly.
+#' 
 #' @return The covariates in the denominator of the selected log-ratio.
 #' 
 #' @export
-getDenominatorParts <- function(cdcr, baseLearnerIndex = 1){
+getDenominatorParts <- function(cdcr, baseLearnerIndex=1, boolean=TRUE){
   
-  cdcr$ensemble[[baseLearnerIndex]]$hard$denominator
+  parts = cdcr$ensemble[[baseLearnerIndex]]$hard$denominator
+  
+  if (boolean) {
+    return(parts)
+  } else {
+    return(colnames(cdcr$x)[parts])
+  }
 }
 
 #' getLogRatios
@@ -974,7 +993,71 @@ getSlopes <- function(cdcr){
 }
 
 
+#' getNumLogRatios
+#'
+#' @param cdcr A codacore object
+#'
+#' @return The number of log-ratios that codacore found.
+#'     Typically a small integer. Can be zero if codacore
+#'     found no predictive log-ratios in the data.
+#' 
+#' @export
+getNumLogRatios <- function(cdcr){
+  return(length(cdcr$ensemble))
+}
+
+
+#' getTidyTable
+#'
+#' @param cdcr A codacore object
+#'
+#' @return A table displaying the log-ratios found.
+#' 
+#' @export
+getTidyTable <- function(cdcr){
+  
+  tidyLogRatio = function(baseLearnerIndex, model, xTrain){
+    x = getNumeratorParts(model, baseLearnerIndex, FALSE)
+    df = data.frame(Side = 'Numerator', Name = x)
+    x = getDenominatorParts(model, baseLearnerIndex, FALSE)
+    df = rbind(df, data.frame(Side = 'Denominator', Name = x))
+    df$logRatioIndex = baseLearnerIndex
+    return(df)
+  }
+  
+  num = getNumLogRatios(cdcr)
+  
+  if (num == 0) {
+    return()
+  } else {
+    do.call(rbind, lapply(1:num, tidyLogRatio, model=cdcr))
+  }
+}
+
+#' getBinaryPartitions
+#'
+#' @param cdcr A codacore object
+#'
+#' @return A matrix describing whether each component (as rows) is found in the
+#'  numerator (1) or denominator (-1) of each learned log-ratio (as columns).
+#'  This format resembles a serial binary partition matrix frequently used
+#'  in balance analysis.
+#' 
+#' @export
+getBinaryPartitions <- function(cdcr){
+  
+  numBaseLearners <- length(cdcr$ensemble)
+  res <- list(numBaseLearners)
+  for(baseLearner in 1:numBaseLearners){
+    thisNumerator <- getNumeratorParts(cdcr, baseLearner)
+    thisDenominater <- getDenominatorParts(cdcr, baseLearner)
+    res[[baseLearner]] <- thisNumerator*1 + thisDenominater*-1
+  }
+  do.call("cbind", res)
+}
+
 .prepx = function(x) {
+  if (class(x)[1] == 'tbl_df') {x = as.data.frame(x)}
   if (class(x)[1] == 'data.frame') {x = as.matrix(x)}
   if (is.integer(x)) {x = x * 1.0}
   
@@ -985,24 +1068,27 @@ getSlopes <- function(cdcr){
 }
 
 .prepy = function(y) {
-  if (class(y)[1] == 'data.frame') {
+  if (inherits(y, 'tbl_df')) {
+    y = as.data.frame(y)
+  }
+  if (inherits(y, 'data.frame')) {
     if (ncol(y) > 1) {
       stop("Response should be 1-dimensional.")
     }
     y = y[[1]]
   }
-  if (class(y)[1] == 'matrix') {
+  if (inherits(y, 'matrix')) {
     if (ncol(y) > 1) {
       stop("Response should be 1-dimensional.")
     }
-    if (class(y[1]) == "character") {
+    if (inherits(y, 'character')) {
       y = as.character(y)
     }
-    if (class(y[1]) == "numeric"){
+    if (inherits(y, 'numeric')){
       y = as.numeric(y)
     }
   }
-  if (class(y) == 'character') {
+  if (inherits(y, 'character')) {
     y = factor(y)
   }
   return(y)

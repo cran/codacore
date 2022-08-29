@@ -8,7 +8,8 @@
 -   [7 Using amalgamations
     (summed-log-ratios)](#using-amalgamations-summed-log-ratios)
 -   [8 Continuous outcomes](#continuous-outcomes)
--   [9 Tuning lambda](#tuning-lambda)
+-   [9 Tuning the regularization parameter
+    lambda](#tuning-the-regularization-parameter-lambda)
     -   [9.1 When no predictive log-ratios are
         found](#when-no-predictive-log-ratios-are-found)
 -   [10 Covariate adjustment](#covariate-adjustment)
@@ -23,8 +24,9 @@ You can install `codacore` by running:
 
     install.packages("codacore")
 
-You may also install the development version directly from Github, using
-the [devtools
+You may instead install the [development
+version](https://github.com/egr95/R-codacore) directly from Github,
+using the [devtools
 package](https://www.r-project.org/nosvn/pandoc/devtools.html).
 
     devtools::install_github("egr95/R-codacore", ref="main")
@@ -47,7 +49,7 @@ time you will likely encounter an error message of the form:
     You can install TensorFlow using the install_tensorflow() function.
 
 This can be fixed simply by [installing
-tensorflow](https://tensorflow.rstudio.com/installation/), as follows:
+tensorflow](https://tensorflow.rstudio.com/install/), as follows:
 
     install.packages("tensorflow")
     library("tensorflow")
@@ -84,9 +86,9 @@ B(x\_i; J^+, J^-) = \\log \\left( \\frac{(\\prod\_{j \\in J^+} x\_{i,j})^{|J^+|}
 $$
 
 For an introduction to balances, we refer the reader to the [selbal
-paper](https://journals.asm.org/doi/abs/10.1128/msystems.00053-18), and
-for a more detaile treatment of CoDaCoRe and other log-ratio
-methodology, we refer the reader to the [codacore
+paper](https://doi.org/10.1101/219386), and for a more detailed
+treatment of CoDaCoRe and other log-ratio methodology, we refer the
+reader to the [codacore
 paper](https://doi.org/10.1093/bioinformatics/btab645) and [this
 paper](https://arxiv.org/abs/2104.07266).
 
@@ -100,8 +102,8 @@ We assume a working installation of `codacore`
 
 In this tutorial, we will showcase `codacore` using three datasets that
 were also analyzed by the authors of `selbal` [(Rivera-Pinto et al.,
-2018)](https://journals.asm.org/doi/abs/10.1128/msystems.00053-18).
-First, we consider the Crohn’s disease data from [(Gevers et al.,
+2018)](https://doi.org/10.1101/219386). First, we consider the Crohn’s
+disease data from [(Gevers et al.,
 2014)](http://dx.doi.org/10.1016/j.chom.2014.02.005).
 
     data("Crohn")
@@ -132,10 +134,14 @@ Next, we split our data into a training and a test set (to keep things
 simple we do this naively at random, though in practice one might
 consider stratified sampling and class rebalancing).
 
-    # For reproducibility, we set a random seed (including in TensorFlow, used by codacore)
-    set.seed(0); library(tensorflow); tf$random$set_seed(0)
+    # For reproducibility, we set a random
+    # seed (including in TensorFlow, used
+    # by codacore)
+    set.seed(0)
+    library(tensorflow)
+    tf$random$set_seed(0)
     trainIndex <- sample(1:nrow(x), 0.8 * nrow(x))
-    xTrain <- x[trainIndex,]
+    xTrain <- x[trainIndex, ]
     yTrain <- y[trainIndex]
 
 We are ready to fit CoDaCoRe. We stick to the default parameters for
@@ -191,25 +197,30 @@ procedure by “stacking” the respective ROC curves.
 
 We can also use our trained model to classify new samples.
 
-    xTest <- x[-trainIndex,]
+    xTest <- x[-trainIndex, ]
     yTest <- y[-trainIndex]
-    yHat <- predict(model, xTest, logits=F)
-    cat("Test set AUC =", pROC::auc(pROC::roc(yTest, yHat, quiet=T)))
+    yHat <- predict(model, xTest, logits = F)
+    cat("Test set AUC =", pROC::auc(pROC::roc(yTest,
+        yHat, quiet = T)))
     #> Test set AUC = 0.80537
-    # Convert probabilities into a binary class
+    # Convert probabilities into a binary
+    # class
     failure <- yHat < 0.5
     success <- yHat >= 0.5
     yHat[failure] <- levels(y)[1]
     yHat[success] <- levels(y)[2]
-    cat("Classification accuracy on test set =", round(mean(yHat == yTest), 2))
-    #> Classification accuracy on test set = 0.77
+    cat("Classification accuracy on test set =",
+        round(mean(yHat == yTest), 2))
+    #> Classification accuracy on test set = 0.73
 
 Note our `predict` function can be restricted to only use the top *k*
 log-ratios in the model for prediction. For example, the following will
 compute the AUC of a 1-log-ratio model, using only the top log-ratio.
 
-    yHat <- predict(model, xTest, logits=F, numLogRatios=1)
-    cat("Test set AUC =", pROC::auc(pROC::roc(yTest, yHat, quiet=T)))
+    yHat <- predict(model, xTest, logits = F,
+        numLogRatios = 1)
+    cat("Test set AUC =", pROC::auc(pROC::roc(yTest,
+        yHat, quiet = T)))
     #> Test set AUC = 0.7859712
 
 Other useful functions include:
@@ -217,6 +228,8 @@ Other useful functions include:
     getNumeratorParts(model, 1)
     getDenominatorParts(model, 1)
     getLogRatios(model, xTest)
+    getNumLogRatios(model)
+    getTidyTable(model)
     getSlopes(model)
 
 # 6 Controlling overlap between log-ratios
@@ -230,7 +243,7 @@ input variables (e.g., to obtain *orthogonal balances*, in the Aitchison
 sense). This can be specified with the parameter `overlap`. In our
 example, note how `g__Dialister` is no longer repeated.
 
-    model <- codacore(xTrain, yTrain, overlap=F)
+    model <- codacore(xTrain, yTrain, overlap = F)
     print(model)
     #> 
     #> Number of log-ratios found: 2
@@ -298,7 +311,7 @@ mean-squared-error, they could specify `objective = 'regression'`).
 
     # Split the data
     trainIndex <- sample(1:nrow(x), 0.8 * nrow(x))
-    xTrain <- x[trainIndex,]
+    xTrain <- x[trainIndex, ]
     yTrain <- y[trainIndex]
 
     # Fit codacore and inspect results
@@ -316,24 +329,24 @@ mean-squared-error, they could specify `objective = 'regression'`).
 
 ![](guide_files/figure-markdown_strict/unnamed-chunk-17-1.png)
 
-# 9 Tuning lambda
+# 9 Tuning the regularization parameter lambda
 
 The parameter `lambda` controls the regularization strength of CoDaCoRe.
 In particular, `lambda = 1` (the default value) corresponds to applying
 the 1-standard-error rule in the discretization step of the log-ratio
 (details in [Section
 3.3](https://www.biorxiv.org/content/10.1101/2021.02.11.430695v2.full.pdf)).
-This is typically a good choice, leading to models that are very sparse
-and also performant. Sparser models can be achieved by higher values of
+This is typically a good choice, leading to models that are both sparse
+and predictive. Sparser models can be achieved by higher values of
 `lambda`, for example, `lambda = 2` corresponds to applying a
 “2-standard-error” rule. On the other hand, smaller values of lambda
-result in less sparse, but typically more predictive, models. In
-particular, `lambda = 0` corresponds to no standard-error rule, in other
-words choosing the log-ratio that minimizes cross-validation score. Such
-a choice can be good when we seek a maximally predictive model, but care
-less about sparsity.
+result in less sparse, but typically most predictive, models. In
+particular, `lambda = 0` corresponds to a “0 standard-error rule”, in
+other words choosing the log-ratio that minimizes cross-validation
+score. Such a choice can be good when we seek a maximally predictive
+model, but care less about sparsity.
 
-    model <- codacore(xTrain, yTrain, lambda = 0.0)
+    model <- codacore(xTrain, yTrain, lambda = 0)
     print(model)
     #> 
     #> Number of log-ratios found: 3
@@ -394,7 +407,7 @@ implemented easily by means of the `offset` parameter.
 
     data("HIV")
     x <- HIV[, 1:(ncol(HIV) - 2)]
-    z <- HIV[, 'MSM']
+    z <- HIV[, "MSM"]
     y <- HIV$HIV_Status
 
     # Replace zeros as before
@@ -402,13 +415,15 @@ implemented easily by means of the `offset` parameter.
 
     # Split the data
     trainIndex <- sample(1:nrow(x), 0.8 * nrow(x))
-    dfTrain <- HIV[trainIndex,]
-    xTrain <- x[trainIndex,]
+    dfTrain <- HIV[trainIndex, ]
+    xTrain <- x[trainIndex, ]
     yTrain <- y[trainIndex]
 
-    partial <- glm(HIV_Status ~ MSM, data=dfTrain, family='binomial')
-    # Note the offset must be given in logit space
-    model <- codacore(xTrain, yTrain, offset=predict(partial))
+    partial <- glm(HIV_Status ~ MSM, data = dfTrain,
+        family = "binomial")
+    # Note the offset must be given in
+    # logit space
+    model <- codacore(xTrain, yTrain, offset = predict(partial))
     print(model)
     #> 
     #> Number of log-ratios found: 1
@@ -418,22 +433,38 @@ implemented easily by means of the `offset` parameter.
     #> Denominator: g_Prevotella g_Alloprevotella g_RC9_gut_group g_Catenibacterium g_Dialister f_Ruminococcaceae_g_Incertae_Sedis f_vadinBB60_g_unclassified g_Oribacterium
     #> AUC: 0.8019231
     #> Slope: 0.5233792
-    partialAUC <- pROC::auc(pROC::roc(yTrain, predict(partial), quiet=T))
+    partialAUC <- pROC::auc(pROC::roc(yTrain,
+        predict(partial), quiet = T))
     codacoreAUC <- model$ensemble[[1]]$AUC
-    cat("AUC gain:", round(100 * (codacoreAUC - partialAUC)), "%")
+    cat("AUC gain:", round(100 * (codacoreAUC -
+        partialAUC)), "%")
     #> AUC gain: 16 %
 
 Note that, when predicting on new data, the contributions of the
 covariates and the log-ratios should be added up in logit space.
 
-    dfTest <- HIV[-trainIndex,]
-    xTest <- x[-trainIndex,]
+    dfTest <- HIV[-trainIndex, ]
+    xTest <- x[-trainIndex, ]
     yTest <- z[-trainIndex]
-    yHatLogit <- predict(partial, newdata = dfTest) + predict(model, xTest, logits=T)
-    yHat <- yHatLogit > 0
-    testAUC <- pROC::auc(pROC::roc(yTest, yHatLogit, quiet=T))
+    yHatLogit <- predict(partial, newdata = dfTest) +
+        predict(model, xTest, logits = T)
+    yHat <- yHatLogit > 0  # in case we need binary predictions e.g. to compute accuracy
+    testAUC <- pROC::auc(pROC::roc(yTest, yHatLogit,
+        quiet = T))
     cat("Test AUC:", round(100 * testAUC), "%")
     #> Test AUC: 100 %
+
+When the outcome variable is continuous, this is simpler as there is no
+logit transformation and the contributions of the partial model can be
+added directly, e.g.,
+
+    # Suppose that, instead of predicting HIV status (a binary target),
+    # we now have some continuous target, 'yCts'
+    partial2 <- lm(yCts ~ MSM, data=dfTrain)
+    model2 <- codacore(xTrain, yCtsTrain, offset=predict(partial))
+    print(model2)
+    yCtsHat <- predict(partial2, newdata = dfTest) + predict(model2, xTest)
+    MSE <- mean((yCtsTest - yCtsHat)^2)
 
 ## 10.2 Joint fit
 
@@ -444,13 +475,19 @@ the outcome jointly against the covariates and the learned log-ratios
 from the previous step. This can be implemented by running, in addition
 to the above, an additional `glm` fit.
 
-    # Create a new design matrix with response & covariates, as well as log-ratios obtained from codacore
-    dfJoint = cbind(dfTrain[, c('MSM', 'HIV_Status')], getLogRatios(model))
+    # Create a new design matrix with
+    # response & covariates, as well as
+    # log-ratios obtained from codacore
+    dfJoint = cbind(dfTrain[, c("MSM", "HIV_Status")],
+        getLogRatios(model))
 
     # And fit everything jointly
-    modelJoint <- glm(HIV_Status ~ ., data=dfJoint, family='binomial')
-    # Can again use this model to make predictions or to interpret regression coefficients
-    yHat <- predict(modelJoint, newData=dfJoint)
+    modelJoint <- glm(HIV_Status ~ ., data = dfJoint,
+        family = "binomial")
+    # Can again use this model to make
+    # predictions or to interpret
+    # regression coefficients
+    yHat <- predict(modelJoint, newData = dfJoint)
     summary(modelJoint)
     #> 
     #> Call:
@@ -498,8 +535,9 @@ find that the learned log-ratio biomarker provides a useful
 representation of the data, markedly separating the MSM from the non-MSM
 individuals.
 
-    clr <- t(apply(x, 1, function(x) log(x) - mean(log(x))))
-    pca <- prcomp(clr, scale=T)
+    clr <- t(apply(x, 1, function(x) log(x) -
+        mean(log(x))))
+    pca <- prcomp(clr, scale = T)
     pc1 = clr %*% pca$rotation[, 1]
 
     model <- codacore(x, as.numeric(pc1))
@@ -516,8 +554,9 @@ important information in the data:
     pc2 = clr %*% pca$rotation[, 2]
     model <- codacore(x, as.numeric(pc2))
     logRatio2 <- getLogRatios(model, x)[, 1]
-    plot(logRatio1, logRatio2, col=z)
-    legend('bottomleft', legend=levels(z), pch=1, col=1:2)
+    plot(logRatio1, logRatio2, col = z)
+    legend("bottomleft", legend = levels(z),
+        pch = 1, col = 1:2)
 
 ![](guide_files/figure-markdown_strict/unnamed-chunk-23-1.png)
 
@@ -545,38 +584,49 @@ data. These latent factors will constitute the regression target for
 CoDaCoRe.
 
     # Load data
-    download.file("https://github.com/egr95/FranzosaData/blob/main/FranzosaMicrobiome.rda?raw=true", "FranzosaMicrobiome")
-    download.file("https://github.com/egr95/FranzosaData/blob/main/FranzosaMetabolite.rda?raw=true", "FranzosaMetabolite")
+    download.file("https://github.com/egr95/FranzosaData/blob/main/FranzosaMicrobiome.rda?raw=true",
+        "FranzosaMicrobiome")
+    download.file("https://github.com/egr95/FranzosaData/blob/main/FranzosaMetabolite.rda?raw=true",
+        "FranzosaMetabolite")
     load("FranzosaMicrobiome")
     load("FranzosaMetabolite")
 
-    # Note data have already been pre-processed as per (Quinn et al., 2021),
-    # including zero-replacement and normalization to a unit total.
-    T <- FranzosaMicrobiome[, -ncol(FranzosaMicrobiome)] # We remove the last column (response variable)
+    # Note data have already been
+    # pre-processed as per (Quinn et al.,
+    # 2021), including zero-replacement and
+    # normalization to a unit total.
+    T <- FranzosaMicrobiome[, -ncol(FranzosaMicrobiome)]  # We remove the last column (response variable)
     U <- FranzosaMetabolite[, -ncol(FranzosaMetabolite)]
 
     # Apply clr transform prior to PLS
-    clrT <- t(apply(T, 1, function(x) log(x) - mean(log(x))))
-    clrU <- t(apply(U, 1, function(x) log(x) - mean(log(x))))
+    clrT <- t(apply(T, 1, function(x) log(x) -
+        mean(log(x))))
+    clrU <- t(apply(U, 1, function(x) log(x) -
+        mean(log(x))))
 
-    # Call mixOmics package and plot first PLS components
-    suppressMessages(library('mixOmics'))
-    pls <- mixOmics::pls(X = clrT, Y = clrU, ncomp = 1)
-    plot(pls$variates$X[,1], pls$variates$Y[,1], main = 'PLS multi-omics (dense)')
+    # Call mixOmics package and plot first
+    # PLS components
+    suppressMessages(library("mixOmics"))
+    pls <- mixOmics::pls(X = clrT, Y = clrU,
+        ncomp = 1)
+    plot(pls$variates$X[, 1], pls$variates$Y[,
+        1], main = "PLS multi-omics (dense)")
 
 ![](guide_files/figure-markdown_strict/unnamed-chunk-24-1.png)
 
 
-    # Approximate the dense PLS representations with sparse log-ratio biomarkers
-    plsX <- pls$variates$X[,1]
+    # Approximate the dense PLS
+    # representations with sparse log-ratio
+    # biomarkers
+    plsX <- pls$variates$X[, 1]
     modelX <- codacore(T, plsX)
-    logRatioX <- getLogRatios(modelX)[,1]
+    logRatioX <- getLogRatios(modelX)[, 1]
 
-    plsY <- pls$variates$Y[,1]
+    plsY <- pls$variates$Y[, 1]
     modelY <- codacore(U, plsY, logRatioType = "B")
-    logRatioY <- getLogRatios(modelY)[,1]
+    logRatioY <- getLogRatios(modelY)[, 1]
 
-    plot(logRatioX, logRatioY, main = 'CoDaCoRe multi-omics (sparse)')
+    plot(logRatioX, logRatioY, main = "CoDaCoRe multi-omics (sparse)")
 
 ![](guide_files/figure-markdown_strict/unnamed-chunk-24-2.png)
 

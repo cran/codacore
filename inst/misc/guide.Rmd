@@ -4,11 +4,15 @@ author:
   - Elliott Gordon Rodriguez^[eg2912@columbia.edu]
 date: "`r Sys.Date()`"
 output: 
-  md_document:
+  rmarkdown::html_vignette:
     number_sections: yes
     toc: true
     toc_depth: 3
-  rmarkdown::html_vignette:
+  pdf_document:
+    number_sections: no
+    toc: false
+    keep_tex: true
+  md_document:
     number_sections: yes
     toc: true
     toc_depth: 3
@@ -23,7 +27,8 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>",
   fig.width = 7,
-  fig.height = 5
+  fig.height = 5,
+  tidy.opts=list(width.cutoff=40), tidy=TRUE
 )
 ```
 
@@ -34,7 +39,7 @@ You can install ```codacore``` by running:
 install.packages("codacore")
 ```
 
-You may also install the development version directly from Github, using the [devtools package](https://www.r-project.org/nosvn/pandoc/devtools.html).
+You may instead install the [development version](https://github.com/egr95/R-codacore) directly from Github, using the [devtools package](https://www.r-project.org/nosvn/pandoc/devtools.html).
 ```r
 devtools::install_github("egr95/R-codacore", ref="main")
 ```
@@ -55,7 +60,7 @@ Python environments searched for 'tensorflow' package:
 You can install TensorFlow using the install_tensorflow() function.
 ```
 
-This can be fixed simply by [installing tensorflow](https://tensorflow.rstudio.com/installation/), as follows:
+This can be fixed simply by [installing tensorflow](https://tensorflow.rstudio.com/install/), as follows:
 ```r
 install.packages("tensorflow")
 library("tensorflow")
@@ -80,7 +85,7 @@ $$
 B(x_i; J^+, J^-) = \log \left( \frac{(\prod_{j \in J^+} x_{i,j})^{|J^+|}}{(\prod_{j \in J^-} x_{i,j})^{|J^-|}} \right).
 $$
 
-For an introduction to balances, we refer the reader to the [selbal paper](https://journals.asm.org/doi/abs/10.1128/msystems.00053-18), and for a more detailed treatment of CoDaCoRe and other log-ratio methodology, we refer the reader to the [codacore paper](https://doi.org/10.1093/bioinformatics/btab645) and [this paper](https://arxiv.org/abs/2104.07266).
+For an introduction to balances, we refer the reader to the [selbal paper](https://doi.org/10.1101/219386), and for a more detailed treatment of CoDaCoRe and other log-ratio methodology, we refer the reader to the [codacore paper](https://doi.org/10.1093/bioinformatics/btab645) and [this paper](https://arxiv.org/abs/2104.07266).
 
 
 # Training the model
@@ -91,7 +96,7 @@ library("codacore")
 help(codacore)
 ```
 
-In this tutorial, we will showcase `codacore` using three datasets that were also analyzed by the authors of `selbal` [(Rivera-Pinto et al., 2018)](https://journals.asm.org/doi/abs/10.1128/msystems.00053-18). First, we consider the Crohn's disease data from [(Gevers et al., 2014)](http://dx.doi.org/10.1016/j.chom.2014.02.005).
+In this tutorial, we will showcase `codacore` using three datasets that were also analyzed by the authors of `selbal` [(Rivera-Pinto et al., 2018)](https://doi.org/10.1101/219386). First, we consider the Crohn's disease data from [(Gevers et al., 2014)](http://dx.doi.org/10.1016/j.chom.2014.02.005).
 ```{r}
 data("Crohn")
 x <- Crohn[, -ncol(Crohn)]
@@ -177,6 +182,8 @@ Other useful functions include:
 getNumeratorParts(model, 1)
 getDenominatorParts(model, 1)
 getLogRatios(model, xTest)
+getNumLogRatios(model)
+getTidyTable(model)
 getSlopes(model)
 ```
 
@@ -222,9 +229,9 @@ print(model)
 plot(model)
 ```
 
-# Tuning lambda
+# Tuning the regularization parameter lambda
 
-The parameter `lambda` controls the regularization strength of CoDaCoRe. In particular, `lambda = 1` (the default value) corresponds to applying the 1-standard-error rule in the discretization step of the log-ratio (details in [Section 3.3](https://www.biorxiv.org/content/10.1101/2021.02.11.430695v2.full.pdf)). This is typically a good choice, leading to models that are very sparse and also performant. Sparser models can be achieved by higher values of `lambda`, for example, `lambda = 2` corresponds to applying a "2-standard-error" rule. On the other hand, smaller values of lambda result in less sparse, but typically more predictive, models. In particular, `lambda = 0` corresponds to no standard-error rule, in other words choosing the log-ratio that minimizes cross-validation score. Such a choice can be good when we seek a maximally predictive model, but care less about sparsity.
+The parameter `lambda` controls the regularization strength of CoDaCoRe. In particular, `lambda = 1` (the default value) corresponds to applying the 1-standard-error rule in the discretization step of the log-ratio (details in [Section 3.3](https://www.biorxiv.org/content/10.1101/2021.02.11.430695v2.full.pdf)). This is typically a good choice, leading to models that are both sparse and predictive. Sparser models can be achieved by higher values of `lambda`, for example, `lambda = 2` corresponds to applying a "2-standard-error" rule. On the other hand, smaller values of lambda result in less sparse, but typically most predictive, models. In particular, `lambda = 0` corresponds to a "0 standard-error rule", in other words choosing the log-ratio that minimizes cross-validation score. Such a choice can be good when we seek a maximally predictive model, but care less about sparsity.
 ```{r}
 model <- codacore(xTrain, yTrain, lambda = 0.0)
 print(model)
@@ -273,11 +280,21 @@ dfTest <- HIV[-trainIndex,]
 xTest <- x[-trainIndex,]
 yTest <- z[-trainIndex]
 yHatLogit <- predict(partial, newdata = dfTest) + predict(model, xTest, logits=T)
-yHat <- yHatLogit > 0
+yHat <- yHatLogit > 0 # in case we need binary predictions e.g. to compute accuracy
 testAUC <- pROC::auc(pROC::roc(yTest, yHatLogit, quiet=T))
 cat("Test AUC:", round(100 * testAUC), "%")
 ```
 
+When the outcome variable is continuous, this is simpler as there is no logit transformation and the contributions of the partial model can be added directly, e.g.,
+```r
+# Suppose that, instead of predicting HIV status (a binary target),
+# we now have some continuous target, 'yCts'
+partial2 <- lm(yCts ~ MSM, data=dfTrain)
+model2 <- codacore(xTrain, yCtsTrain, offset=predict(partial))
+print(model2)
+yCtsHat <- predict(partial2, newdata = dfTest) + predict(model2, xTest)
+MSE <- mean((yCtsTest - yCtsHat)^2)
+```
 
 ## Joint fit
 

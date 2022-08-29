@@ -56,9 +56,10 @@ and vanillaLR (the learning rate to be used if the user does *not* want
 to use the 'adaptiveLR', to be used at the risk of optimization issues).}
 
 \item{cvParams}{A list of named parameters for the "hardening" procedure
-using cross-validation. Includes numFolds (number of folds) and
+using cross-validation. Includes numFolds (number of folds, default=5) and
 maxCutoffs (number of candidate cutoff values of 'c' to be tested out
-during CV process).}
+during CV process, default=20 meaning log-ratios with up to 21 components
+can be found by codacore).}
 
 \item{verbose}{A boolean. Toggles whether to display intermediate steps.}
 
@@ -81,7 +82,7 @@ This function implements the codacore algorithm described by Gordon-Rodriguez et
 (https://doi.org/10.1101/2021.02.11.430695).
 }
 \examples{
-\donttest{
+\dontrun{
 data("Crohn")
 x <- Crohn[, -ncol(Crohn)]
 y <- Crohn[, ncol(Crohn)]
